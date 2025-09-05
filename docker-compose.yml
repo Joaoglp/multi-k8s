@@ -1,10 +1,10 @@
 services:
   client:
-    image: "joaoglp/multi-client"
+    image: 'joaoglp/multi-client'
     mem_limit: 128m
     hostname: client
   server:
-    image: "joaoglp/multi-server"
+    image: 'joaoglp/multi-server'
     mem_limit: 128m
     hostname: api
     environment:
@@ -16,15 +16,15 @@ services:
       - PGPASSWORD=$PGPASSWORD
       - PGPORT=$PGPORT
   worker:
-    image: "joaoglp/multi-worker"
+    image: 'joaoglp/multi-worker'
     mem_limit: 128m
     hostname: worker
     environment:
       - REDIS_HOST=$REDIS_HOST
       - REDIS_PORT=$REDIS_PORT
   nginx:
-    image: "joaoglp/multi-nginx"
+    image: 'joaoglp/multi-nginx'
     mem_limit: 128m
     hostname: nginx
     ports:
-      - "80:80"
+      - '80:80'
