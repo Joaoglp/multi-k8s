@@ -5,3 +5,13 @@ kubectl -n kubernetes-dashboard port-forward svc/kubernetes-dashboard-kong-proxy
 https://127.0.0.1:8443/#/login
 
 kubectl -n kubernetes-dashboard create token admin-user
+
+1. gcloud iam workload-identity-pools create "github" --project="multi-k8s-472408" --location="global" --display-name="GitHub Actions Pool"
+
+2. gcloud iam workload-identity-pools describe "github" --project="multi-k8s-472408" --location="global" --format="value(name)"
+
+3. gcloud iam workload-identity-pools providers create-oidc "my-repo" --project="multi-k8s-472408" --location="global" --workload-identity-pool="github" --display-name="My GitHub repo Provider" --attribute-mapping="google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" --attribute-condition="assertion.repository_owner == 'Joaoglp'" --issuer-uri="https://token.actions.githubusercontent.com"
+
+4. gcloud iam workload-identity-pools providers describe "my-repo" --project="multi-k8s-472408" --location="global" --workload-identity-pool="github" --format="value(name)"
+
+5. gcloud projects add-iam-policy-binding "multi-k8s-472408" --role="roles/container.developer" --member="principalSet://iam.googleapis.com/projects/297021705611/locations/global/workloadIdentityPools/github/attribute.repository/Joaoglp/multi-k8s"

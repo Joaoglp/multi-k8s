@@ -1,41 +1,67 @@
-name: Deploy MultiDocker
+name: Deploy MultiK8s
 on:
   push:
     branches:
       - main
-
+ 
+env:
+  SHA: $(git rev-parse HEAD)
+ 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
     steps:
       - uses: actions/checkout@v3
-
-      - run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-      - run: docker build -t joaoglp/react-test -f ./client/Dockerfile.dev ./client
-      - run: docker run -e CI=true joaoglp/react-test npm test
-
-      - run: docker build -t joaoglp/multi-client ./client
-      - run: docker build -t joaoglp/multi-nginx ./nginx
-      - run: docker build -t joaoglp/multi-server ./server
-      - run: docker build -t joaoglp/multi-worker ./worker
-
-      - run: docker push joaoglp/multi-client
-      - run: docker push joaoglp/multi-nginx
-      - run: docker push joaoglp/multi-server
-      - run: docker push joaoglp/multi-worker
-
-      - name: Generate deployment package
-        run: zip -r deploy.zip . -x '*.git*'
-
-      - name: Deploy to EB
-        uses: einaregilsson/beanstalk-deploy@v18
+ 
+      - name: Test
+        run: |-
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -t joaoglp/react-test -f ./client/Dockerfile.dev ./client
+          docker run -e CI=true joaoglp/react-test npm test
+ 
+      - name: Set Identity Provider
+        uses: "google-github-actions/auth@v2"
         with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_KEY }}
-          application_name: multi-docker
-          environment_name: Multi-docker-env
-          existing_bucket_name: elasticbeanstalk-eu-north-1-782634014534
-          region: eu-north-1
-          version_label: ${{ github.sha }}
-          deployment_package: deploy.zip
+          workload_identity_provider: "projects/297021705611/locations/global/workloadIdentityPools/github/providers/my-repo"
+ 
+      - name: Set Project
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: multi-k8s-472408
+ 
+      - name: Auth
+        run: |-
+          gcloud --quiet auth configure-docker
+ 
+      - name: Get Credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: multi-k8s
+          location: us-central1
+          project_id: multi-k8s-472408
+ 
+      - name: Build
+        run: |-
+          docker build -t joaoglp/multi-client:latest -t joaoglp/multi-client:${{ env.SHA }} -f ./client/Dockerfile ./client
+          docker build -t joaoglp/multi-server:latest -t joaoglp/multi-server:${{ env.SHA }} -f ./server/Dockerfile ./server
+          docker build -t joaoglp/multi-worker:latest -t joaoglp/multi-worker:${{ env.SHA }} -f ./worker/Dockerfile ./worker
+ 
+      - name: Push
+        run: |-
+          docker push joaoglp/multi-client:latest
+          docker push joaoglp/multi-server:latest
+          docker push joaoglp/multi-worker:latest
+ 
+          docker push joaoglp/multi-client:${{ env.SHA }}
+          docker push joaoglp/multi-server:${{ env.SHA }}
+          docker push joaoglp/multi-worker:${{ env.SHA }}
+ 
+      - name: Apply
+        run: |-
+          kubectl apply -f k8s
+          kubectl set image deployments/server-deployment server=joaoglp/multi-server:${{ env.SHA }}
+          kubectl set image deployments/client-deployment client=joaoglp/multi-client:${{ env.SHA }}
+          kubectl set image deployments/worker-deployment worker=joaoglp/multi-worker:${{ env.SHA }}
